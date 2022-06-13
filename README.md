@@ -40,3 +40,4 @@ This file contains declarative statments to run jenkins CI\CD pipeline.
     - add, code linting steps (sonarqube project is preferred)
     - add, testing steps to run all functional and unit test cases.
 6. Dockerfile can be enhanced further to add more env variables to control build creation.
+7. Code quality and exceptions handling can be improved further.
