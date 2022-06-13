@@ -1,24 +1,6 @@
 def getEnvVar(String paramName){
     return sh (script: "grep '${paramName}' env_vars/project.properties|cut -d'=' -f2", returnStdout: true).trim();
 }
-def getTargetEnv(String branchName){
-    def deploy_env = 'none';
-    switch(branchName) {
-        case 'master':
-            deploy_env='uat'
-        break
-        case 'develop':
-            deploy_env = 'dev'
-        default:
-            if(branchName.startsWith('release')){
-                deploy_env='sit'
-            }
-            if(branchName.startsWith('feature')){
-                deploy_env='none'
-            }
-    }
-    return deploy_env
-}
 
 def getImageTag(String currentBranch)
 {

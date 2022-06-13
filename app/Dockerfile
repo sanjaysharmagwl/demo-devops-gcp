@@ -1,58 +1,18 @@
-FROM centos/python-27-centos7
+FROM python:3
 
-ARG APP_HOME=/opt/app-root/src
-ARG USER_NAME=pyflnuser
-ENV USER_NAME ${USER_NAME}
+LABEL author=sanjay
+ARG APP_HOME=/opt/pyfln_auth_api
 ENV APP_HOME $APP_HOME
 
-#env from original 
-ENV APP_ROOT /opt/app-root
-ENV PIP_NO_CACHE_DIR off
-ENV LIBRARY_PATH /opt/rh/httpd24/root/usr/lib64
-ENV PYTHONUNBUFFERED 1
-ENV NODEJS_SCL rh-nodejs8
-ENV LC_ALL en_US.UTF-8
-ENV PYTHONIOENCODING UTF-8
-ENV LD_LIBRARY_PATH /opt/rh/python27/root/usr/lib64:/opt/rh/rh-nodejs8/root/usr/lib64:/opt/rh/httpd24/root/usr/lib64
-ENV VIRTUAL_ENV /opt/app-root
-ENV PYTHON_VERSION 2.7
-ENV PATH /opt/app-root/bin:/opt/rh/python27/root/usr/bin:/opt/rh/rh-nodejs8/root/usr/bin:/opt/rh/httpd24/root/usr/bin:/opt/rh/httpd24/root/usr/sbin:/opt/app-root/src/.local/bin/:/opt/app-root/src/bin:/opt/app-root/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
-ENV STI_SCRIPTS_URL image:///usr/libexec/s2i
-ENV PWD /opt/app-root/src
-ENV STI_SCRIPTS_PATH /usr/libexec/s2i
-ENV LANG en_US.UTF-8
-ENV SUMMARY Platform for building and running Python 2.7 applications
-ENV PS1 (app-root)
-ENV HOME /opt/app-root/src
-ENV SHLVL 1
-ENV PYTHONPATH /opt/rh/rh-nodejs8/root/usr/lib/python2.7/site-packages
-ENV XDG_DATA_DIRS /opt/rh/python27/root/usr/share:/usr/local/share:/usr/share
-ENV PKG_CONFIG_PATH /opt/rh/python27/root/usr/lib64/pkgconfig:/opt/rh/httpd24/root/usr/lib64/pkgconfig
-
-
-USER root
-
-RUN groupadd -g 10000 ${USER_NAME} && \
-    useradd --no-log-init -u 10000 -g ${USER_NAME} -ms /bin/bash ${USER_NAME}
-
-RUN yum -y update && \
-  yum downgrade -y glibc glibc-common glibc-devel glibc-headers && \
-  yum install -y gcc unzip python-setuptools python-ldap
-
-COPY files /tmp/
 COPY app ${APP_HOME}/
+COPY uid_entrypoint ${APP_HOME}
 
-RUN bash -c "cd ${APP_HOME} && python -m pip install -r requirements.txt"
+RUN chmod 0755 ${APP_HOME}/uid_entrypoint && \
+    python -m pip install -r ${APP_HOME}/requirements.txt
 
-RUN cp /tmp/uid_entrypoint ${APP_HOME}/ && \
-  chmod -R 0775 ${APP_HOME} && \
-  chown -R ${USER_NAME}:${USER_NAME} ${APP_HOME} && \
-  chmod -R g=u /etc/passwd
-
-EXPOSE 8000
+EXPOSE 80
 
 WORKDIR ${APP_HOME}
-
 ENTRYPOINT ["./uid_entrypoint"]
 
-CMD ["gunicorn", "-b", "0.0.0.0:8000","wsgi:app"]
+CMD ["gunicorn","-b","0.0.0.0:80","wsgi:app"]

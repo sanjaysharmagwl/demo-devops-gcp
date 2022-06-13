@@ -1,84 +1,77 @@
-import sys
-import os
-import json
-import configparser
-from functools import wraps
+from flask import Flask, request
+from flask_sqlalchemy import SQLAlchemy
+from flask_marshmallow import Marshmallow
+from flask_restful import Api, Resource
 
-import flask_restplus
+# Best Practice: Factory Pattern : TO create all objects at one placed and use it
+def create_app(config=None):
+    app = Flask(__name__)
+    app.config.from_pyfile(config)
+    db = SQLAlchemy(app)
+    ma = Marshmallow(app)
+    api = Api(app)
 
-from flask import Flask, request, abort, Response, jsonify, url_for, session
-from flask_restplus import Api, Resource, fields, reqparse
+    return (app,db,ma,api)
 
-from AppAuth import AppAuth
-from config import AppConfig
+app,db,ma,api = create_app(config="config.py")
+db.create_all()
 
-DEBUG = True
+#MODEL FILE - In prod grade project this should go under model folder
+class Employee(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(100))
+    email = db.Column(db.String(100))
+    
+    def __repr__(self):
+        return '<Employee %s>' % self.name
 
-app = Flask(__name__)
-app.config.from_object(__name__)
-app.config.from_object('config.AppConfig')
-app.config.from_pyfile(os.path.join(".", "config/env.cfg"), silent=False)
+## DB Serialization Schema
+class EmployeeSchema(ma.Schema):
+    class Meta:
+        fields = ('id', 'name', 'email')
 
-config = configparser.ConfigParser
+Employee_schema = EmployeeSchema()
+Employees_schema = EmployeeSchema(many=True)
 
-api = Api(app, version='1.0', title='Simple Ldap App', description = 'Simple Flask Ldap App')
-ns = api.namespace('pyfln',description='Simple Flask Ldap App')
-
-def must_auth(f):
-    @wraps(f)
-    def decorated(*args, **kwargs):
-        auth_header = request.headers.get('Authorization')
-        if auth_header is None:
-            flask_restplus.abort(401, 'Requires authentication!')
-        if AppAuth.verify_auth_token(app,auth_header) is None:
-            flask_restplus.abort(403, 'Authentication token is expired or invalid!')
-        return f(*args, **kwargs)
-    return decorated
-
-login_model = api.model("loginmodel", {
-    "username": fields.String("Username."),
-    "password": fields.String("Password.")
-})
-
-
-@ns.route("/auth_token")
-class AuthToken(Resource):
-    @api.expect(login_model)
+#  Resources : In prod grade project this should go under model folder
+class EmployeeListResource(Resource):
+    
+    def get(self):
+        Employees = Employee.query.all()
+        return Employees_schema.dump(Employees)
+    
     def post(self):
-        error=None
-        login_m = api.payload
-        user = str(login_m['username'])
-        passwd = str(login_m['password'])
-        if AppAuth.verify_password(app, user,passwd) is not None:
-            session['logged_in'] = True
-            return {'Basic': str(AppAuth.generate_auth_token(app, user))}
-        else:
-            error = 'Invalid Credentials, please try again later!'
-            return authenticate()
-    def get(self):
-        session['logged_in']=False
-        return Response(json.dumps({ 'status': 200, 'message': 'You are successfully logged out!'}),200)
-@ns.route("/index")
-class Home(Resource):
-    method_decorators=[must_auth]
-    def get(self):
-        return json.dumps({'payload': ['You','Got','Data']})
-
-def authenticate():
-    message = {
-        'error': 'unauthorized',
-        'message': 'Invalid Credentials, please try again later!',
-        'status': 403
-        }
-    response = Response(
-        json.dumps(message),
-        403,
-        {
-            'WWW-Authenticate': 'Basic realm="Authentication Required"',
-            'Location': url_for('pyfln_auth_token')
-            }
+        new_Employee = Employee(
+            name=request.json['name'],
+            email=request.json['email'],
         )
-    return response
+        db.session.add(new_Employee)
+        db.session.commit()
+        return Employee_schema.dump(new_Employee)
 
-if __name__=="__main__":
-    app.run(host='0.0.0.0')
+class EmployeeResource(Resource):
+    def get(self, Employee_id):
+        Employee = Employee.query.get_or_404(Employee_id)
+        return Employee_schema.dump(Employee)
+    def patch(self, Employee_id):
+        Employee = Employee.query.get_or_404(Employee_id)
+        if 'name' in request.json:
+            Employee.name = request.json['name']
+        if 'email' in request.json:
+            Employee.email = request.json['email']
+            
+        db.session.commit()
+        return Employee_schema.dump(Employee)
+    def delete(self, Employee_id):
+        Employee = Employee.query.get_or_404(Employee_id)
+        db.session.delete(Employee)
+        db.session.commit()
+        return '', 204
+class HealthCheck(Resource):  
+    def get(self):
+        return "Helath:OK"
+    
+# add resource to flask app
+api.add_resource(EmployeeListResource, '/Employees')
+api.add_resource(EmployeeResource, '/Employees/<int:Employee_id>')
+api.add_resource(HealthCheck, '/health')
